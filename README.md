@@ -45,4 +45,3 @@ Everything else uses free public APIs that need no key.
 - **Forecast model**: a ridge-regression model written from scratch, trained in the browser on the 30-day hourly history (PM2.5 lags, wind, humidity, temperature, time of day).
 - **Libraries**: Express, dotenv, Leaflet (maps), Chart.js (charts).
 - **Data/services**: Open-Meteo / CAMS, NASA FIRMS, OpenStreetMap tiles.
-- AI coding assistants were used while building this project.
