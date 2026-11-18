@@ -1,0 +1,19 @@
+{
+  "name": "saaf-saans",
+  "version": "1.0.0",
+  "description": "Saaf Saans — live air quality, smog forecast and AI health advice for Lahore",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.3"
+  }
+}

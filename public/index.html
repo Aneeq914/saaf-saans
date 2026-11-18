@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saaf Saans — صاف سانس</title>
+  <meta name="description" content="Live air quality, AI smog forecast and personalised health advice for Lahore, in English and Urdu.">
+  <meta name="theme-color" content="#f4f6f9" id="meta-theme">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    // Resolve the theme before first paint (no flash). app.js takes over afterwards.
+    (function () {
+      var pref = 'system';
+      try { pref = localStorage.getItem('saafsaans.theme') || 'system'; } catch (e) {}
+      var dark = pref === 'dark' || (pref !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      try {
+        var lang = localStorage.getItem('saafsaans.lang');
+        if (lang === 'ur') { document.documentElement.lang = 'ur'; document.documentElement.dir = 'rtl'; }
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="/css/styles.css">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
+
+  <header class="site-header" id="top">
+    <div class="header-inner">
+      <a class="brand" href="#now" aria-label="Saaf Saans — صاف سانس">
+        <img src="/icon.svg" alt="" width="34" height="34">
+        <span class="brand-text">
+          <span class="brand-name">Saaf Saans <span class="brand-ur" lang="ur" dir="rtl">صاف سانس</span></span>
+          <span class="brand-tagline" data-i18n="app.tagline">Clean-air companion for Lahore</span>
+        </span>
+      </a>
+      <div class="header-controls">
+        <a class="aqi-pill" id="aqi-pill" href="#now" aria-label="Lahore AQI">
+          <span class="aqi-pill-dot" aria-hidden="true"></span>
+          <span class="aqi-pill-label" data-i18n="header.aqiPill">Lahore AQI</span>
+          <span class="aqi-pill-value num" id="aqi-pill-value">–</span>
+        </a>
+        <p class="last-updated" aria-live="polite">
+          <span data-i18n="header.updated">Last updated</span>
+          <time id="last-updated" class="num">--:--</time>
+        </p>
+        <button type="button" id="refresh-btn" class="icon-btn" data-i18n-aria="header.refresh" data-i18n-title="header.refresh" aria-label="Refresh" title="Refresh">
+          <span data-icon="refresh" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="theme-toggle" class="icon-btn" aria-label="Theme">
+          <span id="theme-icon" data-icon="monitor" aria-hidden="true"></span>
+        </button>
+        <button type="button" id="lang-toggle" class="btn-lang" lang="ur" data-i18n="lang.toggleText" data-i18n-aria="lang.toggleLabel" aria-label="Switch language to Urdu">اردو</button>
+      </div>
+    </div>
+    <nav class="site-nav" id="site-nav" data-i18n-aria="nav.label" aria-label="Sections">
+      <ul id="nav-list">
+        <li><a href="#now" data-i18n="nav.now">Right now</a></li>
+        <li><a href="#advice" data-i18n="nav.advice">Advice</a></li>
+        <li><a href="#forecast" data-i18n="nav.forecast">Forecast</a></li>
+        <li><a href="#cities" data-i18n="nav.cities">Cities</a></li>
+        <li><a href="#map-section" data-i18n="nav.map">Map</a></li>
+        <li><a href="#assistant" data-i18n="nav.chat">Assistant</a></li>
+        <li><a href="#policy" data-i18n="nav.policy">Policy</a></li>
+        <li><a href="#sources" data-i18n="nav.sources">Sources</a></li>
+      </ul>
+    </nav>
+    <div id="offline-banner" class="offline-banner" role="status" hidden></div>
+  </header>
+
+  <div id="sr-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <main id="main" class="container" tabindex="-1">
+
+    <!-- 1. Hero: Lahore right now -->
+    <section id="now" class="hero" aria-labelledby="now-title">
+      <div class="hero-head">
+        <h1 id="now-title" data-i18n="hero.title">Lahore right now</h1>
+        <p class="muted small" id="hero-source"></p>
+      </div>
+      <div id="visibility-warning" class="alert alert-warn" role="alert" hidden></div>
+
+      <div class="hero-grid">
+        <div class="gauge-card" id="aqi-block" aria-live="polite" aria-busy="true">
+          <div class="gauge-wrap">
+            <svg class="gauge" id="gauge" viewBox="0 0 240 146" aria-hidden="true" focusable="false"></svg>
+            <div class="gauge-readout">
+              <p class="aqi-value num" id="aqi-value"><span class="skeleton skeleton-num"></span></p>
+              <p class="aqi-badge" id="aqi-badge" hidden></p>
+            </div>
+          </div>
+          <p class="aqi-label" data-i18n="hero.aqiLabel">US Air Quality Index (24-hour average)</p>
+        </div>
+
+        <div class="hero-side">
+          <div class="verdict" id="verdict" data-tone="unknown">
+            <span class="verdict-icon" id="verdict-icon" aria-hidden="true"></span>
+            <div class="verdict-body">
+              <h2 class="verdict-q" data-i18n="hero.safeTitle">Is it safe outside?</h2>
+              <p class="verdict-answer" id="safe-outside"><span class="skeleton skeleton-line"></span></p>
+              <p class="verdict-why" id="verdict-why"></p>
+            </div>
+          </div>
+          <div class="trend" id="trend" aria-live="polite">
+            <div class="trend-text">
+              <h2 class="trend-title" data-i18n="trend.title">Next 6 hours</h2>
+              <p class="trend-answer" id="trend-answer"><span class="skeleton skeleton-line"></span></p>
+              <p class="trend-detail small muted" id="trend-detail"></p>
+            </div>
+            <ol class="trend-bars" id="trend-bars" aria-hidden="true"></ol>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-row">
+        <div class="hero-col">
+          <h2 class="subhead" data-i18n="hero.pollutants">Pollutants</h2>
+          <ul class="pollutant-grid" id="pollutants"></ul>
+        </div>
+        <div class="hero-col">
+          <h2 class="subhead" data-i18n="hero.weather">Weather</h2>
+          <ul class="weather-row" id="weather"></ul>
+        </div>
+      </div>
+      <p class="section-error" id="hero-error" role="alert" hidden></p>
+    </section>
+
+    <!-- 2. Profiles & advice -->
+    <section id="advice" class="card" aria-labelledby="advice-title">
+      <div class="section-head">
+        <span class="section-icon" data-icon="heart" aria-hidden="true"></span>
+        <div>
+          <h2 id="advice-title" data-i18n="advice.title">Who are you?</h2>
+          <p class="muted" data-i18n="advice.subtitle">Pick a profile to get advice made for you.</p>
+        </div>
+      </div>
+      <div class="scroll-fade" data-fade>
+        <div class="profile-row" id="profiles" role="group" data-i18n-aria="advice.title" aria-label="Who are you?"></div>
+      </div>
+      <div id="advice-card" class="advice" aria-live="polite">
+        <span class="skeleton skeleton-block"></span>
+      </div>
+    </section>
+
+    <!-- 3. Forecast -->
+    <section id="forecast" class="card" aria-labelledby="forecast-title">
+      <div class="section-head">
+        <span class="section-icon" data-icon="chart" aria-hidden="true"></span>
+        <div>
+          <h2 id="forecast-title" data-i18n="forecast.title">24-hour smog forecast</h2>
+          <p class="muted" data-i18n="forecast.subtitleShort">Hourly AQI from our AI model, with the CAMS provider forecast for comparison.</p>
+        </div>
+      </div>
+      <div class="forecast-summary" id="forecast-summary" aria-live="polite"></div>
+      <h3 class="subhead" data-i18n="forecast.hourly">Next 24 hours</h3>
+      <div class="scroll-fade" data-fade>
+        <ol class="hour-strip" id="hour-strip"></ol>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="forecast-chart" role="img" data-i18n-aria="forecast.chartLabel" aria-label="Line chart of PM2.5"></canvas>
+        <p class="chart-fallback muted" id="chart-fallback" hidden></p>
+      </div>
+      <p class="small muted chart-note" data-i18n="data.camsNote">PM2.5 is CAMS modelled data, not ground-station readings.</p>
+      <details class="metrics" id="metrics">
+        <summary>
+          <span class="metrics-sum-title" data-i18n="metrics.title">How good is the AI model?</span>
+          <span class="metrics-oneline" id="metrics-oneline"></span>
+          <span class="chev" data-icon="chevron" aria-hidden="true"></span>
+        </summary>
+        <div id="model-metrics" class="metrics-body"></div>
+      </details>
+      <p class="section-error" id="forecast-error" role="alert" hidden></p>
+    </section>
+
+    <!-- 4. City comparison -->
+    <section id="cities" class="card" aria-labelledby="cities-title">
+      <div class="section-head">
+        <span class="section-icon" data-icon="bars" aria-hidden="true"></span>
+        <div>
+          <h2 id="cities-title" data-i18n="cities.title">Pakistan city comparison</h2>
+          <p class="muted" data-i18n="cities.subtitle">Current US AQI, worst to best.</p>
+        </div>
+      </div>
+      <p class="insight" id="cities-summary"></p>
+      <ol class="city-list" id="cities-list"></ol>
+      <p class="section-error" id="cities-error" role="alert" hidden></p>
+    </section>
+
+    <!-- 5. Map -->
+    <section id="map-section" class="card" aria-labelledby="map-title">
+      <div class="section-head">
+        <span class="section-icon" data-icon="pin" aria-hidden="true"></span>
+        <div>
+          <h2 id="map-title" data-i18n="map.title">Map: air quality, fires and reports</h2>
+          <p class="muted" data-i18n="map.subtitle">City AQI, satellite fire hotspots and burning reported by citizens.</p>
+        </div>
+      </div>
+      <div class="map-toolbar">
+        <button type="button" id="report-toggle" class="btn btn-primary" aria-pressed="false" aria-controls="report-form">
+          <span data-i18n="map.report">Report burning</span>
+        </button>
+        <button type="button" id="report-locate" class="btn btn-ghost" hidden data-i18n="map.useLocation">Use my location</button>
+        <p class="muted small" id="map-hint" hidden data-i18n="map.reportHint">Tap the map where you saw burning.</p>
+      </div>
+      <div id="map" class="map" data-i18n-aria="map.label" aria-label="Map"></div>
+      <p class="muted small" id="map-note" hidden></p>
+      <form id="report-form" class="report-form" hidden novalidate>
+        <h3 class="h3" data-i18n="report.title">Report burning</h3>
+        <p class="small"><span data-i18n="report.location">Location</span>: <span id="report-coords" class="num">—</span></p>
+        <div class="field">
+          <label for="report-type" data-i18n="report.type">What did you see?</label>
+          <select id="report-type" name="type" required>
+            <option value="crop_burning" data-i18n="report.types.crop_burning">Crop / stubble burning</option>
+            <option value="waste_burning" data-i18n="report.types.waste_burning">Garbage burning</option>
+            <option value="brick_kiln" data-i18n="report.types.brick_kiln">Smoky brick kiln</option>
+            <option value="industrial" data-i18n="report.types.industrial">Factory smoke</option>
+            <option value="other" data-i18n="report.types.other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="report-note" data-i18n="report.note">Note (optional)</label>
+          <textarea id="report-note" name="note" rows="2" maxlength="280"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="report-submit" data-i18n="report.submit">Submit report</button>
+          <button type="button" class="btn btn-ghost" id="report-cancel" data-i18n="report.cancel">Cancel</button>
+        </div>
+      </form>
+      <p id="report-status" class="small" role="status"></p>
+      <div class="legend" aria-labelledby="legend-title">
+        <h3 class="sr-only" id="legend-title" data-i18n="legend.title">Legend</h3>
+        <ul class="legend-list" id="map-legend"></ul>
+      </div>
+    </section>
+
+    <!-- 6. Assistant -->
+    <section id="assistant" class="card" aria-labelledby="chat-title">
+      <div class="section-head">
+        <span class="section-icon" data-icon="chat" aria-hidden="true"></span>
+        <div>
+          <h2 id="chat-title" data-i18n="chat.title">Ask the AI assistant</h2>
+          <p class="muted" data-i18n="chat.subtitle">It knows today's air quality and forecast. Ask in English or Urdu.</p>
+        </div>
+      </div>
+      <div class="chat">
+        <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div id="chat-typing" class="msg msg-bot chat-typing" hidden>
+          <span class="avatar" data-icon="sparkle" aria-hidden="true"></span>
+          <div class="msg-body">
+            <span class="dots" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="sr-only" data-i18n="chat.typing">Assistant is typing…</span>
+          </div>
+        </div>
+        <div class="suggestions" id="quick-questions" role="group" data-i18n-aria="chat.quick" aria-label="Quick questions"></div>
+        <form id="chat-form" class="chat-form">
+          <label for="chat-input" class="sr-only" data-i18n="chat.inputLabel">Your question</label>
+          <textarea id="chat-input" rows="1" maxlength="1000" data-i18n-placeholder="chat.placeholder" placeholder="Type your question…"></textarea>
+          <button type="submit" class="send-btn" id="chat-send" data-i18n-aria="chat.send" aria-label="Send">
+            <span data-icon="send" class="flip-rtl" aria-hidden="true"></span>
+          </button>
+        </form>
+        <p class="muted small chat-disclaimer" data-i18n="chat.disclaimer">AI answers can be wrong. In a medical emergency call 1122.</p>
+      </div>
+    </section>
+
+    <!-- 7. Policy -->
+    <section id="policy" class="plain-section" aria-labelledby="policy-title">
+      <div class="section-head">
+        <span class="section-icon" data-icon="sliders" aria-hidden="true"></span>
+        <div>
+          <h2 id="policy-title" data-i18n="policy.title">Policy and enforcement simulator</h2>
+          <p class="muted" data-i18n="policy.subtitle">See how different actions could change Lahore's air.</p>
+        </div>
+      </div>
+      <div id="policy-sim" class="policy-sim"><span class="skeleton skeleton-block"></span></div>
+    </section>
+  </main>
+
+  <!-- 8. Footer -->
+  <footer id="sources" class="site-footer" aria-labelledby="sources-title">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-icon" data-icon="info" aria-hidden="true"></span>
+        <div>
+          <h2 id="sources-title" data-i18n="footer.title">Data sources and transparency</h2>
+        </div>
+      </div>
+      <ul class="sources-grid" id="sources-list">
+        <li class="source-card">
+          <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener" data-i18n="footer.srcAq">Open-Meteo Air Quality API (Copernicus CAMS)</a>
+          <span class="muted small"><span data-i18n="footer.refreshed">Refreshed</span> <span id="ts-aq" class="num">—</span></span>
+        </li>
+        <li class="source-card">
+          <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener" data-i18n="footer.srcWeather">Open-Meteo Weather API</a>
+          <span class="muted small"><span data-i18n="footer.refreshed">Refreshed</span> <span id="ts-weather" class="num">—</span></span>
+        </li>
+        <li class="source-card">
+          <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener" data-i18n="footer.srcHistory">30-day history and provider forecast (Open-Meteo / CAMS)</a>
+          <span class="muted small"><span data-i18n="footer.refreshed">Refreshed</span> <span id="ts-history" class="num">—</span></span>
+        </li>
+        <li class="source-card">
+          <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener" data-i18n="footer.srcFirms">NASA FIRMS fire hotspots (VIIRS)</a>
+          <span class="muted small"><span data-i18n="footer.refreshed">Refreshed</span> <span id="ts-fires" class="num">—</span></span>
+        </li>
+        <li class="source-card">
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" data-i18n="footer.srcOsm">Map data © OpenStreetMap contributors</a>
+          <span class="muted small" data-i18n="footer.osmNote">Base map tiles</span>
+        </li>
+        <li class="source-card">
+          <a href="https://www.anthropic.com/claude" target="_blank" rel="noopener" data-i18n="footer.srcClaude">Claude API by Anthropic (AI assistant)</a>
+          <span class="muted small" data-i18n="footer.claudeNote">Answers in the chat (free fallback: Pollinations.ai)</span>
+        </li>
+      </ul>
+      <div class="disclosure">
+        <span class="disclosure-icon" data-icon="sparkle" aria-hidden="true"></span>
+        <div>
+          <h3 class="h4" data-i18n="footer.aiTitle">AI disclosure</h3>
+          <p class="small" data-i18n="footer.aiText">The forecast is a ridge regression model trained in your browser on 30 days of live data. The assistant uses Claude by Anthropic when an API key is set, otherwise the free Pollinations.ai model. Both can be wrong: always follow official health guidance.</p>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p class="small muted" data-i18n="footer.hackathon">Built for CodeBlue Lahore — Hack 4 Clean Air.</p>
+        <a class="small" href="#top" data-i18n="footer.back">Back to top</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
